@@ -1,258 +1,101 @@
-# lib-sercure
+# @minhkhoa99/lib-sercure
 
-Reusable NestJS security library for app-layer protection with a hexagonal architecture split into inbound adapters, application services, and outbound storage.
+Một thư viện chặn IP, Rate-Limit, và Abuse Detection chuẩn Production dành riêng cho Ecosystem **NestJS** nội bộ.
 
-## What it provides
+## Tính năng chính (Core Features)
+- **Advanced Rate Limiting:** Trượt cửa sổ (Sliding Window) qua Redis an toàn tuyệt đối với C10k.
+- **Abuse Detection:** Hệ thống tự động phát hiện hành vi khả nghi (404 Burst, Auth Brute-force, Suspicious Path), tích lũy `Score` và chuyển thành Throttle/Block.
+- **Auto Blocklist:** Blocklist tự động theo dõi và cách ly IP/User vi phạm. Bỏ qua database lookup, cache Redis trực tiếp.
+- **Resilient Fallback:** Tự động rơi xuống sử dụng Memory (In-Memory Map) nếu Redis không kết nối được hoặc dev quên truyền `storage`. Fix chống Memory Leak.
+- **Thread-safe:** Toàn bộ transaction được đóng trong Redis LUAs.
 
-- request fingerprinting with `trustProxy` support
-- Redis-backed sliding window rate limiting
-- IP and user blocklist management with TTL
-- abuse detection with suspicion scoring and escalation
-- request hardening middleware for body/query/header checks
-- structured audit events and interceptor-based logging
-- developer decorators and centralized policy registry
+## Cài đặt (Installation)
 
-## Architecture
-
-The library follows a hexagonal NestJS layout under `libs/security/src`:
-
-- `inbound/`: middleware, guards, interceptors
-- `application/`: orchestration services and ports
-- `outbound/`: Redis adapter
-- `decorators/`: route metadata APIs
-- `config/`, `constants/`, `types/`, `utils/`: shared contracts and helpers
-
-## Install
+Thư viện hiện publish trên Private Registry nội bộ của team/công ty.
 
 ```bash
-npm install @nestjs/common @nestjs/core reflect-metadata rxjs class-transformer class-validator ioredis
+npm install @minhkhoa99/lib-sercure ioredis
+# Hoặc yarn
+yarn add @minhkhoa99/lib-sercure ioredis
 ```
 
-## Quick start
+*(Yêu cầu `peerDependencies`: `@nestjs/core`, `@nestjs/common`, `ioredis`)*.
 
-```ts
+## Bắt đầu sử dụng (Quick Start)
+
+### 1. Import module
+
+Tại Root `AppModule`, import `SecurityModule.forRoot()`:
+
+```typescript
 import { Module } from '@nestjs/common';
-import { SecurityModule } from '@lib-sercure/security';
+import { SecurityModule } from '@minhkhoa99/lib-sercure';
+import Redis from 'ioredis';
+import { RedisStorageAdapter } from '@minhkhoa99/lib-sercure'; 
 
 @Module({
   imports: [
-    SecurityModule.forRoot({
-      trustProxy: true,
-      globalRateLimit: {
-        keyBy: 'ip',
-        limit: 60,
-        windowMs: 60_000,
-      },
-      suspiciousRoutePatterns: ['/admin', '/.env', '/wp-login'],
-      policies: {
-        'auth-login': {
-          name: 'auth-login',
-          keyBy: 'ip-route',
-          limit: 5,
-          windowMs: 10 * 60_000,
-        },
-      },
-    }),
-  ],
-})
-export class AppModule {}
-```
-
-## Async configuration
-
-```ts
-import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { SecurityModule } from '@lib-sercure/security';
-
-@Module({
-  imports: [
-    ConfigModule.forRoot(),
     SecurityModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
-        trustProxy: configService.get('TRUST_PROXY') === 'true',
-        logging: { enabled: true },
-      }),
+      inject: [], // Inject ConfigService nếu cần
+      useFactory: () => {
+        const redisClient = new Redis('redis://localhost:6379');
+        return {
+          trustProxy: 1, // Tin tưởng 1 Proxy (ELB/Nginx) chống IP Spoofing
+          storage: new RedisStorageAdapter(redisClient), // Hoặc bỏ trống để dùng In-Memory 
+          // Custom Rate Limit mặc định:
+          globalRateLimit: {
+            limit: 100,
+            windowMs: 60_000,
+            keyBy: 'ip',
+          },
+          // ...
+          logging: {
+            enabled: true,
+            minLevel: 'warn',
+          }
+        };
+      },
     }),
   ],
 })
 export class AppModule {}
 ```
 
-## Decorators
+### 2. Sử dụng Decorator cho API
 
-```ts
-import {
-  RateLimit,
-  SecurityPolicy,
-  SkipSecurity,
-} from '@lib-sercure/security';
-import { Controller, Get, Post } from '@nestjs/common';
+```typescript
+import { Controller, Get } from '@nestjs/common';
+import { RateLimit, Blockable, SkipSecurity } from '@minhkhoa99/lib-sercure';
 
-@Controller()
-export class AuthController {
-  @Post('/auth/login')
-  @RateLimit({
-    name: 'auth-login',
-    keyBy: 'ip-route',
-    limit: 5,
-    windowMs: 10 * 60_000,
-  })
-  login() {
+@Controller('users')
+export class UsersController {
+  
+  @Get('profile')
+  @RateLimit('ip', 5, 10_000) // Chỉ 5 requests / 10s cho riêng route này
+  @Blockable() // Theo dõi Abuse detection 
+  getProfile() {
     return { ok: true };
   }
 
-  @Get('/admin/dashboard')
-  @SecurityPolicy('admin-default')
-  adminDashboard() {
-    return { secure: true };
-  }
-
-  @Get('/health')
-  @SkipSecurity()
-  healthcheck() {
-    return { status: 'ok' };
+  @Get('health')
+  @SkipSecurity() // Bỏ qua tất cả bảo mật
+  health() {
+    return 'OK';
   }
 }
 ```
 
-## Security logging
+## Chú ý về Production Configuration
 
-The library now supports structured attack-focused logging with a default Nest logger adapter and custom override support.
+1. **`trustProxy`:** Cấu hình **tuyệt đối quan trọng** để phòng chống IP Spoofing. Truyền vào một cấu hình `number` tuỳ số lượng LB (Load Balancer) mà môi trường Deploy của bạn đi qua. 
+   - `0` hoặc KhônG truyền (hoặc `false`): Request nối thẳng.
+   - `1`: Yêu cầu NGINX/Alb đẩy vào.
+   - `true`: Tin tưởng vào Proxy Cuối Cùng.
+2. **Abuse Route Patterns:** Hãy đổi `suspiciousRoutePatterns` nếu bạn có API nhạy cảm riêng biệt.
+3. Không expose PostgreSQL port `5432` ngoài Internet, vì thư viện này **KHÔNG** làm thay WAF ở Firewall.
 
-```ts
-import {
-  NestSecurityLoggerAdapter,
-  SecurityLoggerPort,
-  SecurityModule,
-} from '@lib-sercure/security';
-import { ConsoleLogger, Module } from '@nestjs/common';
+## Documents nội bộ
 
-const defaultSecurityLogger = new NestSecurityLoggerAdapter(
-  new ConsoleLogger('SecurityLibrary'),
-);
-
-@Module({
-  imports: [
-    SecurityModule.forRoot({
-      trustProxy: true,
-      logging: {
-        enabled: true,
-        verbose: false,
-        minLevel: 'warn',
-        persistAudit: true,
-        includeHeaders: false,
-        includeQueryMetadata: false,
-        redactFields: ['authorization', 'cookie', 'x-api-key'],
-        logger: defaultSecurityLogger,
-      },
-    }),
-  ],
-})
-export class AppModule {}
-```
-
-You can also override the logger with your own adapter:
-
-```ts
-class AppSecurityLogger implements SecurityLoggerPort {
-  async log(entry) {
-    // send to Pino, Winston, OpenTelemetry, SIEM, etc.
-  }
-}
-```
-
-Examples of emitted attack logs:
-
-- `Rate limit exceeded from IP 203.0.113.10 on POST /auth/login`
-- `Blocked request from IP 198.51.100.8 due to abuse-score escalation`
-- `Suspicious path access from IP 192.0.2.4 on GET /.env`
-
-Important attack-triage fields include:
-
-- `ip`
-- `requestId`
-- `userId`
-- `method`
-- `path`
-- `route`
-- `userAgent`
-- `policy`
-- `score`
-- `reason`
-- `retryAfterMs`, `current`, `limit`
-- `metadata.matchedPattern`, `metadata.proxyChain`, `metadata.blockExpiresAt`
-
-## Default policies
-
-- `public-default`: `60 req / 60 sec / IP`
-- `auth-login`: `5 req / 10 min / IP`
-- `otp-send`: `3 req / 15 min / user`
-- `upload-default`: `10 req / 10 min / user`
-- `admin-default`: `10 req / 60 sec / IP`
-- `healthcheck`: lightweight/skip profile
-
-## Redis key strategy
-
-- `sec:rl:ip:{ip}:global`
-- `sec:rl:ip:{ip}:route:{route}`
-- `sec:block:ip:{ip}`
-- `sec:block:user:{userId}`
-- `sec:abuse:score:ip:{ip}`
-- `sec:abuse:404:ip:{ip}`
-- `sec:abuse:auth:user:{userId}`
-- `sec:audit:{type}:{timestamp}:{ip}`
-
-TTL is cleanup-driven:
-
-- rate-limit windows expire with policy window
-- abuse score expires with `abuseDetection.scoreTtlMs`
-- block entries expire with configured block duration
-- audit entries expire after 24 hours by default
-
-## Security event schema
-
-Each audit event follows `AuditEvent`:
-
-```ts
-type AuditEvent = {
-  type:
-    | 'RATE_LIMIT'
-    | 'BLOCK'
-    | 'SUSPICIOUS_ROUTE'
-    | 'MALFORMED_REQUEST'
-    | 'ABUSE_SCORE'
-    | 'REQUEST_REJECTED'
-    | 'POLICY_APPLIED';
-  ip: string;
-  userId?: string;
-  route: string;
-  path: string;
-  method: string;
-  userAgent: string;
-  score?: number;
-  policy?: string;
-  statusCode: number;
-  timestamp: string;
-  metadata: Record<string, unknown>;
-};
-```
-
-## Verification
-
-```bash
-npm test
-npm run typecheck
-npm run build
-```
-
-## Production notes
-
-- enable `trustProxy` only when you actually trust the reverse proxy chain
-- Redis is required for production-grade counters and block state; in-memory should stay test-only
-- choose rate limits per route carefully to reduce false positives
-- audit volume can grow quickly on noisy APIs, so plan retention and downstream log shipping
-- security logs intentionally surface the client IP and key attack indicators for incident triage
-- this library is app-layer protection only; database and private networking still must be secured separately
+- [Cấu hình nâng cao](./docs/configuration.md)
+- [Quản trị Rate Limit & Blocklist](./docs/blocklist-and-abuse-detection.md)
+- [Release Process cho Developer/Maintainer](./RELEASE.md)

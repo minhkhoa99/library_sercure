@@ -1,36 +1,61 @@
 {
-  "name": "lib-sercure",
+  "name": "@minhkhoa99/lib-sercure",
   "version": "1.0.0",
-  "description": "Reusable NestJS security library with hexagonal architecture.",
-  "main": "dist/libs/security/index.js",
+  "description": "Production-ready reusable NestJS security library with rate-limiting, blocklisting, and abuse detection.",
+  "main": "dist/libs/security/src/index.js",
+  "types": "dist/libs/security/src/index.d.ts",
+  "files": [
+    "dist/libs/security/src"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist",
     "test": "jest --runInBand",
     "test:watch": "jest --watch",
     "test:unit": "jest --runInBand --selectProjects unit",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint \"{libs,test}/**/*.ts\" --fix",
+    "format": "prettier --write \"libs/**/*.ts\" \"test/**/*.ts\"",
+    "prepublishOnly": "npm run clean && npm run typecheck && npm run test && npm run build"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "nestjs",
+    "security",
+    "rate-limit",
+    "abuse-detection",
+    "blocklist"
+  ],
+  "author": "minhkhoa99 / Backend Team",
+  "license": "UNLICENSED",
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^10.0.0 || ^11.0.0",
+    "@nestjs/core": "^10.0.0 || ^11.0.0",
+    "ioredis": "^5.0.0"
+  },
   "dependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.0 || ^0.15.1",
+    "reflect-metadata": "^0.1.13 || ^0.2.0",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
     "@nestjs/common": "^11.1.17",
     "@nestjs/core": "^11.1.17",
     "@nestjs/platform-express": "^11.1.17",
     "@nestjs/testing": "^11.1.17",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.15.1",
-    "ioredis": "^5.10.1",
-    "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
-  },
-  "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.5.0",
+    "ioredis": "^5.10.1",
     "jest": "^30.3.0",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "prettier": "^3.0.0",
+    "eslint": "^9.0.0"
   }
 }

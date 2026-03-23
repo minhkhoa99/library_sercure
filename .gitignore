@@ -43,3 +43,4 @@ service-account-file.json
 /.env
 /'D:\Export'
 /yarn.lock
+/.worktrees/

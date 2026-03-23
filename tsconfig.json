@@ -20,6 +20,6 @@
       "@lib-sercure/security/*": ["libs/security/src/*"]
     }
   },
-  "include": ["libs/**/*.ts", "test/**/*.ts", "jest.config.ts"],
+  "include": ["libs/**/*.ts", "test/**/*.ts", "jest.config.ts", "examples/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
