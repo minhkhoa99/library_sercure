@@ -1,5 +1,11 @@
+import { Inject, Injectable } from '@nestjs/common';
+
 import type { SecurityStoragePort } from '../ports/security-storage.port';
 import type { SecurityModuleOptions } from '../../config/security-module-options.interface';
+import {
+  SECURITY_MODULE_OPTIONS,
+  SECURITY_STORAGE,
+} from '../../constants/security.constants';
 import type { RequestFingerprint } from '../../types/request-fingerprint.types';
 import type { SecurityPolicy } from '../../types/security-policy.types';
 
@@ -12,10 +18,11 @@ export interface RateLimitDecision {
   scope: string;
 }
 
+@Injectable()
 export class RateLimitService {
   constructor(
-    private readonly storage: SecurityStoragePort,
-    private readonly options: SecurityModuleOptions,
+    @Inject(SECURITY_STORAGE) private readonly storage: SecurityStoragePort,
+    @Inject(SECURITY_MODULE_OPTIONS) private readonly options: SecurityModuleOptions,
   ) {}
 
   async checkLimit(

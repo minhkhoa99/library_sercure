@@ -15,7 +15,7 @@ describe('RateLimitGuard', () => {
       checkLimit: jest.fn().mockResolvedValue({ allowed: true }),
     };
     const reflector = new Reflector();
-    const guard = new RateLimitGuard(reflector, service as never, createOptions());
+    const guard = new RateLimitGuard(reflector, service as never);
     const context = createContext();
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
@@ -43,7 +43,7 @@ describe('RateLimitGuard', () => {
       windowMs: 600000,
     }, handler);
 
-    const guard = new RateLimitGuard(reflector, service as never, createOptions());
+    const guard = new RateLimitGuard(reflector, service as never);
     const context = createContext(handler);
 
     await expect(guard.canActivate(context)).rejects.toMatchObject({ status: 429 });
@@ -69,7 +69,7 @@ describe('RateLimitGuard', () => {
     };
     const logger = { log: jest.fn().mockResolvedValue(undefined) };
     const reflector = new Reflector();
-    const guard = new RateLimitGuard(reflector, service as never, createOptions(), undefined, logger as never);
+    const guard = new RateLimitGuard(reflector, service as never, undefined, logger as never);
 
     await expect(guard.canActivate(createContext())).rejects.toMatchObject({ status: 429 });
     expect(logger.log).toHaveBeenCalledWith(
@@ -101,12 +101,7 @@ describe('RateLimitGuard', () => {
     const handler = () => undefined;
     Reflect.defineMetadata(SECURITY_POLICY_METADATA, 'admin-default', handler);
 
-    const guard = new RateLimitGuard(
-      reflector,
-      service as never,
-      createOptions(),
-      policyRegistry as never,
-    );
+    const guard = new RateLimitGuard(reflector, service as never, policyRegistry as never);
 
     await expect(guard.canActivate(createContext(handler))).resolves.toBe(true);
     expect(policyRegistry.get).toHaveBeenCalledWith('admin-default');
@@ -148,41 +143,4 @@ function createContext(handler: () => void = () => undefined): ExecutionContext 
     switchToWs: () => ({ getClient: () => undefined, getData: () => undefined }),
     getType: () => 'http',
   } as unknown as ExecutionContext;
-}
-
-function createOptions(): SecurityModuleOptions {
-  return {
-    trustProxy: false,
-    globalRateLimit: {
-      keyBy: 'ip',
-      limit: 60,
-      windowMs: 60_000,
-    },
-    blocklist: {
-      enabled: true,
-      baseBlockDurationMs: 900_000,
-    },
-    abuseDetection: {
-      enabled: true,
-      scoreTtlMs: 3_600_000,
-    },
-    bodyLimits: {
-      jsonBytes: 1024,
-      formBytes: 2048,
-      queryStringMaxLength: 512,
-    },
-    timeoutMs: 15_000,
-    policies: {},
-    suspiciousRoutePatterns: [],
-    skipRoutes: [],
-    logging: {
-      enabled: true,
-      verbose: false,
-      minLevel: 'warn',
-      persistAudit: true,
-      includeHeaders: false,
-      includeQueryMetadata: false,
-      redactFields: [],
-    },
-  };
 }

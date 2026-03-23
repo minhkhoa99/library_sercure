@@ -22,9 +22,9 @@ describe('AbuseDetectionService', () => {
 
     expect(result.triggeredRules).toContain('suspicious-path');
     expect(result.scoreDelta).toBe(5);
-    expect(storage.setJson).toHaveBeenCalledWith(
+    expect(storage.incrementAbuseScore).toHaveBeenCalledWith(
       'sec:abuse:score:ip:127.0.0.1',
-      expect.objectContaining({ score: 5 }),
+      5,
       3_600_000,
     );
     expect(logger.log).toHaveBeenCalledWith(
@@ -143,6 +143,9 @@ function createStorageMock(options?: {
       return null;
     }),
     setJson: jest.fn().mockResolvedValue(undefined),
+    incrementAbuseScore: jest
+      .fn()
+      .mockImplementation(async (_key: string, delta: number) => (options?.existingScore ?? 0) + delta),
     trackSlidingWindow: jest.fn().mockResolvedValue(options?.slidingCount ?? 0),
   };
 }

@@ -10,8 +10,8 @@ describe('RedisStorageAdapter', () => {
     expect(adapter.buildKey('block', 'user', 'u-1')).toBe('sec:block:user:u-1');
   });
 
-  it('tracks sliding window counts through a redis pipeline', async () => {
-    const redis = createRedisMock({ execResult: [[null, 1], [null, 0], [null, 3], [null, 1]] });
+  it('tracks sliding window counts through a redis lua script', async () => {
+    const redis = createRedisMock({ evalResult: 3 });
     const adapter = new RedisStorageAdapter(redis as never);
 
     const count = await adapter.trackSlidingWindow({
@@ -22,11 +22,36 @@ describe('RedisStorageAdapter', () => {
     });
 
     expect(count).toBe(3);
-    expect(redis.pipelineOps).toEqual([
-      ['zadd', 'sec:rl:ip:127.0.0.1:global', 5000, 'entry-1'],
-      ['zremrangebyscore', 'sec:rl:ip:127.0.0.1:global', 0, -55000],
-      ['zcard', 'sec:rl:ip:127.0.0.1:global'],
-      ['pexpire', 'sec:rl:ip:127.0.0.1:global', 60000],
+    expect(redis.evalCalls).toEqual([
+      [
+        expect.stringContaining('ZADD'),
+        1,
+        'sec:rl:ip:127.0.0.1:global',
+        5000,
+        'entry-1',
+        -55000,
+        60000,
+      ],
+    ]);
+  });
+
+  it('increments abuse score atomically with ttl retention', async () => {
+    const redis = createRedisMock({ evalResult: 14 });
+    const adapter = new RedisStorageAdapter(redis as never);
+
+    const totalScore = await adapter.incrementAbuseScore(
+      'sec:abuse:score:ip:127.0.0.1',
+      2,
+      3_600_000,
+    );
+
+    expect(totalScore).toBe(14);
+    expect(redis.evalCalls[0]).toEqual([
+      expect.stringContaining('INCRBYFLOAT'),
+      1,
+      'sec:abuse:score:ip:127.0.0.1',
+      2,
+      3_600_000,
     ]);
   });
 
@@ -43,34 +68,17 @@ describe('RedisStorageAdapter', () => {
   });
 });
 
-function createRedisMock(options?: { execResult?: Array<[null, number]> }) {
-  const pipelineOps: Array<[string, ...Array<string | number>]> = [];
+function createRedisMock(options?: { evalResult?: number }) {
+  const evalCalls: Array<[string, ...Array<string | number>]> = [];
   const setCalls: Array<[string, string, 'PX', number]> = [];
 
   return {
-    pipelineOps,
+    evalCalls,
     setCalls,
-    pipeline() {
-      return {
-        zadd(key: string, score: number, member: string) {
-          pipelineOps.push(['zadd', key, score, member]);
-          return this;
-        },
-        zremrangebyscore(key: string, min: number, max: number) {
-          pipelineOps.push(['zremrangebyscore', key, min, max]);
-          return this;
-        },
-        zcard(key: string) {
-          pipelineOps.push(['zcard', key]);
-          return this;
-        },
-        pexpire(key: string, ttlMs: number) {
-          pipelineOps.push(['pexpire', key, ttlMs]);
-          return this;
-        },
-        exec: jest.fn().mockResolvedValue(options?.execResult ?? []),
-      };
-    },
+    eval: jest.fn().mockImplementation(async (...args: [string, ...Array<string | number>]) => {
+      evalCalls.push(args);
+      return options?.evalResult ?? 0;
+    }),
     set: jest.fn().mockImplementation(async (...args: [string, string, 'PX', number]) => {
       setCalls.push(args);
       return 'OK';

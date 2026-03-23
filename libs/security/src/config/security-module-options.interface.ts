@@ -2,6 +2,7 @@ import { ModuleMetadata, Provider, Type } from '@nestjs/common';
 
 import { DEFAULT_SECURITY_POLICIES } from '../policies/default-security-policies';
 import type { SecurityLoggerPort } from '../application/ports/security-logger.port';
+import type { SecurityStoragePort } from '../application/ports/security-storage.port';
 import { RateLimitKeyBy, SecurityPolicy } from '../types/security-policy.types';
 import type { SecurityLogSeverity } from '../types/security-log-entry.types';
 
@@ -39,7 +40,8 @@ export interface SecurityLoggingOptions {
 }
 
 export interface SecurityModuleOptions {
-  trustProxy: boolean;
+  trustProxy: boolean | number;
+  storage?: SecurityStoragePort;
   globalRateLimit: GlobalRateLimitOptions;
   blocklist: BlocklistOptions;
   abuseDetection: AbuseDetectionOptions;

@@ -1,12 +1,12 @@
 import { RequestFingerprintMiddleware } from './request-fingerprint.middleware';
 
 describe('RequestFingerprintMiddleware', () => {
-  it('prefers forwarded headers when trustProxy is enabled', () => {
+  it('supports hop indexing when trustProxy is configured as a number', () => {
     const logger = { log: jest.fn().mockResolvedValue(undefined) };
-    const middleware = new RequestFingerprintMiddleware({ trustProxy: true }, logger as never);
+    const middleware = new RequestFingerprintMiddleware({ trustProxy: 2 }, logger as never);
     const request = {
       headers: {
-        'x-forwarded-for': '198.51.100.10, 10.0.0.2',
+        'x-forwarded-for': '8.8.8.8, 198.51.100.10, 10.0.0.2',
         'user-agent': 'jest-agent',
         'x-request-id': 'req-1',
       },
@@ -31,6 +31,22 @@ describe('RequestFingerprintMiddleware', () => {
       requestId: 'req-1',
     });
     expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses rightmost forwarded ip when trustProxy is true', () => {
+    const middleware = new RequestFingerprintMiddleware({ trustProxy: true });
+    const request = {
+      headers: {
+        'x-forwarded-for': '8.8.8.8, 172.16.0.1',
+      },
+      ip: '172.16.0.1',
+      method: 'GET',
+      originalUrl: '/health',
+    } as any;
+
+    middleware.use(request, {} as never, jest.fn());
+
+    expect(request.securityFingerprint.ip).toBe('172.16.0.1');
   });
 
   it('logs proxy warning when trustProxy is enabled without forwarded headers', () => {

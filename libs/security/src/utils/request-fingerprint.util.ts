@@ -17,7 +17,7 @@ interface RequestLike {
 
 export function createRequestFingerprint(
   request: RequestLike,
-  trustProxy: boolean,
+  trustProxy: boolean | number,
 ): RequestFingerprint {
   const path = normalizePath(request.originalUrl);
   const route = request.route?.path || path;

@@ -1,6 +1,12 @@
+import { Inject, Injectable } from '@nestjs/common';
+
 import { BlocklistService } from './blocklist.service';
 import type { SecurityStoragePort } from '../ports/security-storage.port';
 import type { SecurityModuleOptions } from '../../config/security-module-options.interface';
+import {
+  SECURITY_MODULE_OPTIONS,
+  SECURITY_STORAGE,
+} from '../../constants/security.constants';
 import type {
   AbuseDetectionInput,
   AbuseDetectionResult,
@@ -8,11 +14,12 @@ import type {
 } from '../../types/abuse-detection.types';
 import { SecurityLoggingService } from './security-logging.service';
 
+@Injectable()
 export class AbuseDetectionService {
   constructor(
-    private readonly storage: SecurityStoragePort,
+    @Inject(SECURITY_STORAGE) private readonly storage: SecurityStoragePort,
     private readonly blocklistService: BlocklistService,
-    private readonly options: SecurityModuleOptions,
+    @Inject(SECURITY_MODULE_OPTIONS) private readonly options: SecurityModuleOptions,
     private readonly securityLoggingService?: SecurityLoggingService,
   ) {}
 
@@ -101,15 +108,9 @@ export class AbuseDetectionService {
     }
 
     const scoreKey = this.storage.buildKey('abuse', 'score', 'ip', input.fingerprint.ip);
-    const current = (await this.storage.getJson<AbuseScoreState>(scoreKey)) ?? { score: 0 };
-    const totalScore = current.score + scoreDelta;
-
-    await this.storage.setJson(
+    const totalScore = await this.storage.incrementAbuseScore(
       scoreKey,
-      {
-        score: totalScore,
-        updatedAt: new Date(now).toISOString(),
-      } satisfies AbuseScoreState,
+      scoreDelta,
       this.options.abuseDetection.scoreTtlMs,
     );
 

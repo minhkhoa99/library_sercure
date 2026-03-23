@@ -1,11 +1,19 @@
 import { DynamicModule, Logger, Module, Provider } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import { APP_GUARD, Reflector } from '@nestjs/core';
 
 import { SecurityLoggerPort } from '../application/ports/security-logger.port';
+import { SecurityStoragePort } from '../application/ports/security-storage.port';
 import { PolicyRegistryService } from '../application/services/policy-registry.service';
 import { SecurityLoggingService } from '../application/services/security-logging.service';
+import { RateLimitService } from '../application/services/rate-limit.service';
+import { BlocklistService } from '../application/services/blocklist.service';
+import { AbuseDetectionService } from '../application/services/abuse-detection.service';
+import { AuditLogService } from '../application/services/audit-log.service';
+import { RateLimitGuard } from '../inbound/guards/rate-limit.guard';
+import { BlocklistGuard } from '../inbound/guards/blocklist.guard';
 import { SECURITY_MODULE_OPTIONS } from '../constants/security.constants';
 import { SECURITY_LOGGER } from '../constants/security.constants';
+import { SECURITY_STORAGE } from '../constants/security.constants';
 import {
   createSecurityModuleOptions,
   SecurityModuleAsyncOptions,
@@ -14,6 +22,7 @@ import {
 } from '../config/security-module-options.interface';
 import { NestSecurityLoggerAdapter } from '../outbound/logging/nest-security-logger.adapter';
 import { NoopSecurityLoggerAdapter } from '../outbound/logging/noop-security-logger.adapter';
+import { MemoryStorageAdapter } from '../outbound/storage/memory-storage.adapter';
 
 @Module({})
 export class SecurityModule {
@@ -27,16 +36,34 @@ export class SecurityModule {
       module: SecurityModule,
       providers: [
         optionsProvider,
+        this.createSecurityStorageProvider(),
         this.createSecurityLoggerProvider(),
         this.createSecurityLoggingServiceProvider(),
         this.createPolicyRegistryProvider(),
         Reflector,
+        RateLimitService,
+        BlocklistService,
+        AbuseDetectionService,
+        AuditLogService,
+        {
+          provide: APP_GUARD,
+          useClass: RateLimitGuard,
+        },
+        {
+          provide: APP_GUARD,
+          useClass: BlocklistGuard,
+        },
       ],
       exports: [
         SECURITY_MODULE_OPTIONS,
+        SECURITY_STORAGE,
         SECURITY_LOGGER,
         SecurityLoggingService,
         PolicyRegistryService,
+        RateLimitService,
+        BlocklistService,
+        AbuseDetectionService,
+        AuditLogService,
       ],
       global: true,
     };
@@ -48,17 +75,35 @@ export class SecurityModule {
       imports: options.imports,
       providers: [
         ...this.createAsyncProviders(options),
+        this.createSecurityStorageProvider(),
         this.createSecurityLoggerProvider(),
         this.createSecurityLoggingServiceProvider(),
         this.createPolicyRegistryProvider(),
         Reflector,
+        RateLimitService,
+        BlocklistService,
+        AbuseDetectionService,
+        AuditLogService,
+        {
+          provide: APP_GUARD,
+          useClass: RateLimitGuard,
+        },
+        {
+          provide: APP_GUARD,
+          useClass: BlocklistGuard,
+        },
         ...(options.extraProviders ?? []),
       ],
       exports: [
         SECURITY_MODULE_OPTIONS,
+        SECURITY_STORAGE,
         SECURITY_LOGGER,
         SecurityLoggingService,
         PolicyRegistryService,
+        RateLimitService,
+        BlocklistService,
+        AbuseDetectionService,
+        AuditLogService,
       ],
       global: true,
     };
@@ -78,6 +123,15 @@ export class SecurityModule {
 
         return new NestSecurityLoggerAdapter(new Logger('SecurityLibrary'));
       },
+      inject: [SECURITY_MODULE_OPTIONS],
+    };
+  }
+
+  private static createSecurityStorageProvider(): Provider {
+    return {
+      provide: SECURITY_STORAGE,
+      useFactory: (moduleOptions: SecurityModuleOptions): SecurityStoragePort =>
+        moduleOptions.storage ?? new MemoryStorageAdapter(),
       inject: [SECURITY_MODULE_OPTIONS],
     };
   }

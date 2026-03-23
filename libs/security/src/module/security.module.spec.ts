@@ -1,11 +1,15 @@
 import { Test } from '@nestjs/testing';
 
 import {
+  SECURITY_STORAGE,
   SECURITY_LOGGER,
   SECURITY_MODULE_OPTIONS,
 } from '../constants/security.constants';
+import { AbuseDetectionService } from '../application/services/abuse-detection.service';
+import { BlocklistService } from '../application/services/blocklist.service';
 import { SecurityLoggingService } from '../application/services/security-logging.service';
 import { PolicyRegistryService } from '../application/services/policy-registry.service';
+import { RateLimitService } from '../application/services/rate-limit.service';
 import {
   createSecurityModuleOptions,
   type SecurityModuleOptions,
@@ -137,5 +141,29 @@ describe('SecurityModule', () => {
       .compile();
 
     expect(moduleRef.get(SECURITY_LOGGER)).toBe(providerLogger);
+  });
+
+  it('resolves core services and storage binding from module configuration', async () => {
+    const storage = {
+      buildKey: jest.fn(),
+      trackSlidingWindow: jest.fn(),
+      incrementAbuseScore: jest.fn(),
+      setJson: jest.fn(),
+      getJson: jest.fn(),
+      isHealthy: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        SecurityModule.forRoot({
+          storage: storage as never,
+        }),
+      ],
+    }).compile();
+
+    expect(moduleRef.get(SECURITY_STORAGE)).toBe(storage);
+    expect(moduleRef.get(RateLimitService)).toBeDefined();
+    expect(moduleRef.get(BlocklistService)).toBeDefined();
+    expect(moduleRef.get(AbuseDetectionService)).toBeDefined();
   });
 });

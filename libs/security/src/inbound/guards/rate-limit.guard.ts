@@ -26,7 +26,6 @@ export class RateLimitGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly rateLimitService: RateLimitService,
-    private readonly _options: SecurityModuleOptions,
     private readonly policyRegistry?: PolicyRegistryService,
     private readonly securityLoggingService?: SecurityLoggingService,
   ) {}
