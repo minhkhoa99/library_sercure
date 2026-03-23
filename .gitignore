@@ -4,7 +4,8 @@
 package-lock.json
 /deploy/*
 docker-compose.yml
- 
+/docs
+/superpowers
 # Logs
 logs
 *.log
