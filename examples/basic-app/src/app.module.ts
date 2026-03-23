@@ -1,6 +1,6 @@
 // src/app.module.ts
 import { Module } from '@nestjs/common';
-import { SecurityModule, RedisStorageAdapter } from '../../libs/security/src';
+import { SecurityModule, RedisStorageAdapter } from '@lib-sercure/security';
 // import { SecurityModule } from '@minhkhoa99/lib-sercure'; // Lúc cài đặt npm thực tế
 import Redis from 'ioredis';
 import { AppController } from './app.controller';
@@ -40,6 +40,7 @@ import { AppController } from './app.controller';
             persistAudit: false,       // In console chứ không lưu CSDL
             includeHeaders: false,     // Chống rò rỉ token
             includeQueryMetadata: true,
+            verbose: true,
             redactFields: ['authorization', 'cookie', 'password'],
           },
           suspiciousRoutePatterns: [

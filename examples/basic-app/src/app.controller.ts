@@ -1,5 +1,5 @@
 import { Controller, Get, Post } from '@nestjs/common';
-import { RateLimit, SkipSecurity } from '../../libs/security/src';
+import { RateLimit, SkipSecurity } from '@lib-sercure/security';
 
 @Controller('public')
 export class AppController {
